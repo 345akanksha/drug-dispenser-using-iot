@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>ESP32 Medicine Dispenser Portal</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/push.js/1.0.12/push.min.js"></script>
+  <style>
+    body { background: linear-gradient(135deg, #f4f7fa 0%, #e3f6ff 100%); font-family: "Segoe UI", "Roboto", Arial, sans-serif; min-height: 100vh;}
+    .container { max-width: 700px; margin-top: 48px; padding-bottom: 50px; animation: fadeIn 0.8s;}
+    h2 { color: #17807e; letter-spacing: 1px; font-weight: 700; background: linear-gradient(90deg, #17807e 60%, #2bd19d 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px;}
+    .tab-pane { background: #fff; border-radius: 14px; padding: 32px; margin-top: 18px; box-shadow: 0 6px 28px #e3f6ff; transition: box-shadow 0.2s;}
+    .tab-pane:hover { box-shadow: 0 8px 32px #b3e6ff;}
+    .badge { font-size: 98%; padding: 0.5em 1em; border-radius: 9px;}
+    .nav-link.active { background: #17807e !important; color: #fff !important; border-bottom: 2px solid #2bd19d !important; box-shadow: 0 2px 6px rgba(23,128,126,0.21);}
+    .nav-link { color: #17807e; font-weight: 500;}
+    .nav-link:hover { background: #e3f6ff !important; color: #2bd19d !important;}
+    input.form-control, button.btn { border-radius: 8px; border: 1px solid #2bd19d;}
+    input.form-control:focus { box-shadow: 0 0 0 2px #2bd19d33; border-color: #17807e;}
+    .btn-primary, .btn-outline-primary { background: linear-gradient(90deg, #45c6ba 70%, #2bd19d 100%); border: none; color: #fff; font-weight: 500;}
+    .btn-primary:hover, .btn-outline-primary:hover { background: linear-gradient(90deg, #17807e 90%, #2bd19d 100%); box-shadow: 0 2px 12px #2bd19d77;}
+    .table { background: #e3f6ff; border-radius: 10px; box-shadow: 0 1px 6px #2bd19d22;}
+    strong { color: #17807e;}
+    #editMedModal { display:none; position:fixed; top:30%; left:50%; transform:translate(-50%,-50%); background:#fff;
+      border-radius:10px; padding:22px; box-shadow:0 4px 18px #17807e33; min-width:320px; z-index:999; }
+    @keyframes fadeIn { from {opacity: 0; transform: translateY(30px);} to {opacity: 1; transform: none;} }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h2 class="mb-3 text-center">ESP32 Medicine Dispenser</h2>
+
+  <!-- Signup -->
+  <div id="signup-page" style="display:none;">
+    <form id="signupForm" style="max-width:400px;margin:2em auto;">
+      <h4>Sign Up</h4>
+      <input type="text" name="name" required placeholder="Full Name" class="form-control mb-2" />
+      <input type="email" name="email" required placeholder="Email" class="form-control mb-2" />
+      <input type="password" name="password" required placeholder="Password" class="form-control mb-2" />
+      <button class="btn btn-primary w-100">Create Account</button>
+      <div class="mt-2">Already registered?
+        <button type="button" class="btn btn-link btn-sm p-0" onclick="showLogin()">Login</button>
+      </div>
+      <div id="signup-error" class="text-danger mt-2"></div>
+    </form>
+  </div>
+
+  <!-- Login -->
+  <div id="login-page">
+    <form id="loginForm" style="max-width:400px;margin:2em auto;">
+      <h4>Login</h4>
+      <input type="email" name="email" required placeholder="Email" class="form-control mb-2" />
+      <input type="password" name="password" required placeholder="Password" class="form-control mb-2" />
+      <button class="btn btn-primary w-100">Login</button>
+      <div class="mt-2">New user?
+        <button type="button" class="btn btn-link btn-sm p-0" onclick="showSignup()">Sign up</button>
+      </div>
+      <div id="login-error" class="text-danger mt-2"></div>
+    </form>
+  </div>
+
+  <!-- Main -->
+  <div id="main-page" style="display:none;">
+    <div class="d-flex justify-content-between mb-2">
+      <span id="caretaker-info"></span>
+      <button class="btn btn-outline-secondary btn-sm" onclick="logout()">Logout</button>
+    </div>
+    <ul class="nav nav-tabs">
+      <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#schedule">Schedule</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#overdue">Overdue</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#settings">Settings</a></li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Schedule -->
+      <div class="tab-pane fade show active" id="schedule">
+        <div id="schedule-content" class="mt-3"></div>
+        <form id="addMedForm" class="row g-2 mt-4">
+          <div class="col-md-4"><input type="text" required class="form-control" name="medicine_name" placeholder="Medicine Name" /></div>
+          <div class="col-md-3"><input type="time" required class="form-control" name="time" /></div>
+          <div class="col-md-2 d-grid"><button type="submit" class="btn btn-primary">Add</button></div>
+        </form>
+        <div id="addMedAlert" class="mt-2"></div>
+      </div>
+
+      <!-- Overdue -->
+      <div class="tab-pane fade" id="overdue">
+        <div id="overdue-content" class="mt-3"></div>
+      </div>
+
+      <!-- Settings -->
+      <div class="tab-pane fade" id="settings">
+        <div class="mt-3">
+          <h5>Push Notifications</h5>
+          <p>Status: <span id="push-status" class="badge bg-secondary">Permission Needed</span></p>
+          <button class="btn btn-outline-primary btn-sm" onclick="enablePush()">Enable Push Notifications</button>
+          <div class="form-text mt-2">You will get browser alerts if a dose is <span class="text-danger">missed</span>!</div>
+
+          <!-- Dispenser Password UI -->
+          <div class="mt-4">
+            <h5>Dispenser Password</h5>
+            <div class="d-flex">
+              <input id="dispPw" type="password" class="form-control me-2" placeholder="New Password" style="max-width:200px;">
+              <button class="btn btn-outline-primary btn-sm" onclick="updatePassword()">Update</button>
+            </div>
+            <div id="pwAlert" class="text-success mt-2"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="editMedModal">
+    <h5>Edit Medicine</h5>
+    <form id="editMedForm">
+      <input type="hidden" name="id" />
+      <input type="text" name="medicine_name" required placeholder="Medicine Name" class="form-control mb-2" />
+      <input type="time" name="time" required class="form-control mb-2" />
+      <div>
+        <button type="submit" class="btn btn-primary">Update</button>
+        <button type="button" class="btn btn-link" onclick="closeEditMed()">Cancel</button>
+      </div>
+      <div id="editMedAlert" class="mt-2"></div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API_BASE = "http://localhost:5000";
+
+// ========== AUTH ==========
+function showSignup(){ document.getElementById('login-page').style.display='none'; document.getElementById('signup-page').style.display=''; }
+function showLogin(){ document.getElementById('signup-page').style.display='none'; document.getElementById('login-page').style.display=''; }
+
+document.getElementById('signupForm').onsubmit = async e=>{
+  e.preventDefault();
+  const form = Object.fromEntries(new FormData(e.target));
+  const res = await fetch(`${API_BASE}/signup`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form)});
+  const data = await res.json();
+  if(data.success){ showLogin(); } else document.getElementById('signup-error').textContent=data.error||'Signup failed';
+};
+
+document.getElementById('loginForm').onsubmit = async e=>{
+  e.preventDefault();
+  const form = Object.fromEntries(new FormData(e.target));
+  const res = await fetch(`${API_BASE}/login`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form), credentials:'include'});
+  const data = await res.json();
+  if(data.success) showMainPage(data.name, data.email);
+  else document.getElementById('login-error').textContent='Invalid credentials';
+};
+
+async function logout(){
+  await fetch(`${API_BASE}/logout`, {credentials:'include'});
+  document.getElementById('main-page').style.display='none';
+  showLogin();
+}
+
+// ========== MAIN ==========
+async function showMainPage(name,email){
+  document.getElementById('signup-page').style.display='none';
+  document.getElementById('login-page').style.display='none';
+  document.getElementById('main-page').style.display='';
+  document.getElementById('caretaker-info').innerHTML=`<strong>Logged in:</strong> ${name} (<span>${email}</span>)`;
+  loadSchedule();
+  loadOverdue();
+  loadPassword();
+}
+
+// ========== CRUD ==========
+async function loadSchedule(){
+  const res = await fetch(`${API_BASE}/schedule`, {credentials:'include'});
+  if(!res.ok) return;
+  const data = await res.json();
+  const div = document.getElementById('schedule-content');
+  div.innerHTML = `<table class="table"><thead><tr><th>Medicine</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead><tbody>`+
+    data.map(m=>`<tr><td>${m.medicine_name}</td><td>${m.time}</td><td>${m.taken ? 'Taken' : 'Not Taken'}</td>
+    <td>
+      <button class='btn btn-sm btn-outline-primary me-2' onclick='openEditMed(${m.id},"${m.medicine_name}","${m.time}")'>Edit</button>
+      <button class='btn btn-sm btn-outline-danger' onclick='deleteMed(${m.id})'>Delete</button>
+    </td></tr>`).join('')+`</tbody></table>`;
+
+  // Schedule push reminders for upcoming medicines
+  scheduleReminders(data);
+}
+
+document.getElementById('addMedForm').onsubmit = async e=>{
+  e.preventDefault();
+  const form = Object.fromEntries(new FormData(e.target));
+  const res = await fetch(`${API_BASE}/schedule`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form), credentials:'include'});
+  if(res.ok){ e.target.reset(); loadSchedule(); document.getElementById('addMedAlert').textContent='Added successfully!'; }
+};
+
+async function deleteMed(id){
+  if(!confirm('Delete this schedule?')) return;
+  const res = await fetch(`${API_BASE}/schedule/${id}`, {method:'DELETE', credentials:'include'});
+  if(res.ok) loadSchedule();
+}
+
+// ========== EDIT ==========
+function openEditMed(id,name,time){
+  const modal=document.getElementById('editMedModal');
+  modal.style.display='block';
+  modal.querySelector('[name=id]').value=id;
+  modal.querySelector('[name=medicine_name]').value=name;
+  modal.querySelector('[name=time]').value=time;
+}
+function closeEditMed(){ document.getElementById('editMedModal').style.display='none'; }
+
+document.getElementById('editMedForm').onsubmit = async e=>{
+  e.preventDefault();
+  const f=new FormData(e.target);
+  const id=f.get('id');
+  const body={medicine_name:f.get('medicine_name'), time:f.get('time')};
+  const res=await fetch(`${API_BASE}/schedule/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), credentials:'include'});
+  if(res.ok){ closeEditMed(); loadSchedule(); }
+};
+
+// ========== OVERDUE ==========
+async function loadOverdue(){
+  const res=await fetch(`${API_BASE}/overdue`, {credentials:'include'});
+  if(!res.ok) return;
+  const data=await res.json();
+  document.getElementById('overdue-content').innerHTML=data.length
+    ? '<ul class="list-group">'+data.map(d=>`<li class="list-group-item list-group-item-danger"><strong>${d.medicine_name}</strong> missed at ${d.time}</li>`).join('')+'</ul>'
+    : '<p class="text-success">No overdue medicines!</p>';
+}
+
+// ========== PUSH (with Push.js) ==========
+function enablePush() {
+  Push.Permission.request(
+    () => {
+      document.getElementById('push-status').textContent = "Enabled";
+      document.getElementById('push-status').className = "badge bg-success";
+    },
+    () => {
+      document.getElementById('push-status').textContent = "Denied";
+      document.getElementById('push-status').className = "badge bg-danger";
+    }
+  );
+}
+
+// Schedule local browser push notifications
+function scheduleReminders(medicines) {
+  const now = new Date();
+  medicines.forEach(med => {
+    const [h, m] = med.time.split(":").map(Number);
+    const medTime = new Date();
+    medTime.setHours(h, m, 0, 0);
+
+    if (medTime > now) {
+      const delay = medTime - now;
+      // Reminder at exact time
+      setTimeout(() => {
+        Push.create("Medicine Reminder 💊", {
+          body: `It's time for your medicine: ${med.medicine_name}`,
+          timeout: 8000,
+          icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png"
+        });
+
+        // Missed alert after 5 minutes
+        setTimeout(async () => {
+          const res = await fetch(`${API_BASE}/overdue`, {credentials:'include'});
+          const data = await res.json();
+          const missed = data.find(d => d.medicine_name === med.medicine_name);
+          if (missed) {
+            Push.create("Missed Medicine ⚠️", {
+              body: `You missed your medicine: ${med.medicine_name}`,
+              timeout: 8000,
+              icon: "https://cdn-icons-png.flaticon.com/512/564/564619.png"
+            });
+            loadOverdue();
+          }
+        }, 5 * 60 * 1000); // 5 minutes
+      }, delay);
+    }
+  });
+}
+
+// ========== Password endpoints ==========
+async function updatePassword() {
+  const pw = document.getElementById('dispPw').value.trim();
+  if (!pw) return;
+  const res = await fetch(`${API_BASE}/password`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'include',
+    body: JSON.stringify({password: pw})
+  });
+  const data = await res.json();
+  document.getElementById('pwAlert').textContent =
+    res.ok ? "Password updated successfully!" : (data.error || "Error updating password");
+}
+
+async function loadPassword() {
+  const res = await fetch(`${API_BASE}/password`, {credentials:'include'});
+  if (!res.ok) return;
+  const data = await res.json();
+  document.getElementById('dispPw').value = data.password;
+}
+
+// initial whoami check
+window.onload=async()=>{
+  const res=await fetch(`${API_BASE}/whoami`, {credentials:'include'});
+  const d=await res.json();
+  if(d.logged_in) showMainPage(d.name,d.email);
+};
+</script>
+</body>
+</html>
