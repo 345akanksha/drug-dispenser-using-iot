@@ -120,7 +120,7 @@ The system successfully dispenses medication at predefined times and provides ti
 ## Contributors
 
 Akanksha Shetty
-Additional contributors (if applicable)
+
 
 ---
 
